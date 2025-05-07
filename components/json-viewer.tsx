@@ -1,9 +1,10 @@
 "use client"
 
 import { useState } from "react"
+import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { ChevronDown, ChevronRight, Search } from "lucide-react"
+import { ChevronDown, ChevronRight, Copy, Search } from "lucide-react"
 
 interface JsonViewerProps {
   data: any
@@ -23,39 +24,47 @@ export function JsonViewer({ data }: JsonViewerProps) {
     setExpandedPaths(newExpandedPaths)
   }
 
-  // Function to check if a path or its children match the search term
-  const pathMatchesSearch = (path: string, value: any): boolean => {
-    if (path.toLowerCase().includes(searchTerm.toLowerCase())) {
-      return true
-    }
-
-    if (typeof value === "object" && value !== null) {
-      return Object.keys(value).some((key) => {
-        const childPath = `${path}.${key}`
-        return pathMatchesSearch(childPath, value[key])
-      })
-    }
-
-    return false
+  const copyToClipboard = () => {
+    navigator.clipboard.writeText(JSON.stringify(data, null, 2))
   }
 
-  // Recursively render the JSON tree with search highlighting
+  const getPathDisplay = (path: string) => {
+    return path === "root" ? "root" : path.split(".").pop()
+  }
+
   const renderValue = (value: any, path: string, depth = 0) => {
-    if (value === null) return null
+    if (value === null) return <span className="text-gray-500">null</span>
 
-    // For objects and arrays
-    if (typeof value === "object") {
-      const isArray = Array.isArray(value)
+    if (Array.isArray(value)) {
       const isExpanded = expandedPaths.has(path)
-      const matchesSearch = searchTerm && pathMatchesSearch(path, value)
+      const matchesSearch = searchTerm && path.toLowerCase().includes(searchTerm.toLowerCase())
 
-      // Auto-expand paths that match search
-      if (matchesSearch && searchTerm && !isExpanded) {
-        setExpandedPaths((prev) => new Set([...prev, path]))
-      }
+      return (
+        <div className={`ml-${depth * 4} ${matchesSearch ? "bg-yellow-100" : ""}`}>
+          <div className="flex items-center cursor-pointer" onClick={() => togglePath(path)}>
+            {isExpanded ? <ChevronDown className="h-4 w-4 mr-1" /> : <ChevronRight className="h-4 w-4 mr-1" />}
+            <span className="text-purple-600">[{value.length}]</span>
+          </div>
 
-      const keys = isArray ? [...Array(value.length).keys()] : Object.keys(value)
-      const pathName = path === "root" ? "root" : path.split(".").pop()
+          {isExpanded && (
+            <div className="ml-4 border-l-2 pl-2 border-gray-200">
+              {value.map((item: any, index: number) => (
+                <div key={`${path}.${index}`} className="my-1">
+                  <span className="text-gray-500 mr-2">{index}:</span>
+                  {renderValue(item, `${path}.${index}`, depth + 1)}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )
+    }
+
+    if (typeof value === "object") {
+      const isExpanded = expandedPaths.has(path)
+      const matchesSearch = searchTerm && path.toLowerCase().includes(searchTerm.toLowerCase())
+      const keys = Object.keys(value)
+      const pathName = getPathDisplay(path)
 
       return (
         <div className={`ml-${depth * 4} ${matchesSearch ? "bg-yellow-100" : ""}`}>
@@ -63,9 +72,9 @@ export function JsonViewer({ data }: JsonViewerProps) {
             {isExpanded ? <ChevronDown className="h-4 w-4 mr-1" /> : <ChevronRight className="h-4 w-4 mr-1" />}
             <span className="text-gray-700 font-medium mr-1">{pathName}:</span>
             <span className="text-purple-600">
-              {isArray ? "[" : "{"}
+              {"{"}
               {keys.length}
-              {isArray ? "]" : "}"}
+              {"}"}
             </span>
           </div>
 
@@ -73,10 +82,7 @@ export function JsonViewer({ data }: JsonViewerProps) {
             <div className="ml-4 border-l-2 pl-2 border-gray-200">
               {keys.map((key) => (
                 <div key={`${path}.${key}`} className="my-1">
-                  <span className={isArray ? "text-gray-500 mr-2" : "text-blue-600 mr-2"}>
-                    {isArray ? key : `"${key}"`}
-                    {!isArray && ":"}
-                  </span>
+                  <span className="text-blue-600 mr-2">"{key}":</span>
                   {renderValue(value[key], `${path}.${key}`, depth + 1)}
                 </div>
               ))}
@@ -86,8 +92,25 @@ export function JsonViewer({ data }: JsonViewerProps) {
       )
     }
 
-    // For primitive values
-    return <span className="text-green-600">{typeof value === "string" ? `"${value}"` : String(value)}</span>
+    // Primitive values
+    const matchesSearch =
+      searchTerm &&
+      (path.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        String(value).toLowerCase().includes(searchTerm.toLowerCase()))
+
+    if (typeof value === "string") {
+      return <span className={`text-green-600 ${matchesSearch ? "bg-yellow-100" : ""}`}>"{value}"</span>
+    }
+
+    if (typeof value === "number") {
+      return <span className={`text-orange-600 ${matchesSearch ? "bg-yellow-100" : ""}`}>{value}</span>
+    }
+
+    if (typeof value === "boolean") {
+      return <span className={`text-red-600 ${matchesSearch ? "bg-yellow-100" : ""}`}>{String(value)}</span>
+    }
+
+    return <span className={matchesSearch ? "bg-yellow-100" : ""}>{String(value)}</span>
   }
 
   return (
@@ -101,13 +124,17 @@ export function JsonViewer({ data }: JsonViewerProps) {
             <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
               id="search"
-              placeholder="অনুসন্ধান করুন..."
+              placeholder="Search in JSON..."
               className="pl-8"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
         </div>
+        <Button variant="outline" size="sm" onClick={copyToClipboard}>
+          <Copy className="h-4 w-4 mr-2" />
+          Copy
+        </Button>
       </div>
 
       <div className="font-mono text-sm overflow-auto max-h-[500px] p-4 bg-white rounded border">
